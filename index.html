@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Summarizer</title>
+
+<style>
+/* =========================================================
+   RESET
+========================================================= */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    min-height: 100vh;
+    color: #fff;
+    overflow-x: hidden;
+    background:
+        radial-gradient(circle at 20% 10%, rgba(255, 145, 20, .20), transparent 28%),
+        radial-gradient(circle at 80% 20%, rgba(255, 80, 20, .12), transparent 30%),
+        linear-gradient(135deg, #070402, #1b0b03 45%, #080402);
+}
+
+/* =========================================================
+   BACKGROUND
+========================================================= */
+.background {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.smoke {
+    position: absolute;
+    width: 600px;
+    height: 600px;
+    border-radius: 50%;
+    filter: blur(100px);
+    opacity: .18;
+    animation: smokeMove 12s ease-in-out infinite alternate;
+}
+
+.smoke.one {
+    background: #ff7200;
+    left: -200px;
+    top: -150px;
+}
+
+.smoke.two {
+    background: #ff3c00;
+    right: -250px;
+    top: 200px;
+    animation-delay: -4s;
+}
+
+.smoke.three {
+    background: #ffb000;
+    left: 35%;
+    bottom: -400px;
+    animation-delay: -7s;
+}
+
+@keyframes smokeMove {
+    from { transform: translate3d(0,0,0) scale(1); }
+    to { transform: translate3d(100px,-60px,0) scale(1.25); }
+}
+
+.particle {
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    background: #ff9d24;
+    border-radius: 50%;
+    box-shadow: 0 0 12px #ff8c00;
+    animation: floatParticle linear infinite;
+}
+
+@keyframes floatParticle {
+    from { transform: translateY(110vh); opacity: 0; }
+    20% { opacity: 1; }
+    80% { opacity: 1; }
+    to { transform: translateY(-10vh); opacity: 0; }
+}
+
+/* =========================================================
+   MAIN
+========================================================= */
+.container {
+    position: relative;
+    z-index: 2;
+    width: min(1100px, 92%);
+    margin: auto;
+    padding: 70px 0 100px;
+}
+
+/* =========================================================
+   BADGE / TITLE
+========================================================= */
+.badge {
+    width: fit-content;
+    margin: 0 auto 30px;
+    padding: 12px 24px;
+    border: 1px solid rgba(255,166,70,.45);
+    border-radius: 999px;
+    background: rgba(255,130,20,.08);
+    backdrop-filter: blur(12px);
+    color: #ffd39b;
+    font-size: 15px;
+    box-shadow: 0 0 30px rgba(255,120,0,.08),
+                inset 0 0 20px rgba(255,150,40,.03);
+    animation: badgeGlow 3s ease-in-out infinite;
+}
+
+@keyframes badgeGlow {
+    50% {
+        box-shadow: 0 0 45px rgba(255,120,0,.18),
+                    inset 0 0 20px rgba(255,150,40,.06);
+    }
+}
+
+h1 {
+    text-align: center;
+    font-size: clamp(55px, 9vw, 105px);
+    line-height: .95;
+    font-weight: 900;
+    letter-spacing: -5px;
+    margin-bottom: 30px;
+    background: linear-gradient(
+        90deg,
+        #ffd21c,
+        #ff9d00,
+        #ff652c,
+        #ff9d00,
+        #ffd21c
+    );
+    background-size: 300% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: titleGradient 6s linear infinite;
+}
+
+@keyframes titleGradient {
+    to { background-position: 300% center; }
+}
+
+.subtitle {
+    text-align: center;
+    max-width: 800px;
+    margin: 0 auto 55px;
+    font-size: clamp(18px, 2.2vw, 25px);
+    line-height: 1.6;
+    color: #d7c8bc;
+}
+
+/* =========================================================
+   INPUT CARD
+========================================================= */
+.card {
+    position: relative;
+    padding: 2px;
+    border-radius: 30px;
+    background: linear-gradient(
+        120deg,
+        rgba(255,145,0,.8),
+        rgba(255,70,0,.4),
+        rgba(255,190,60,.8),
+        rgba(255,70,0,.4)
+    );
+    background-size: 300% 300%;
+    animation: borderFlow 6s ease infinite;
+    box-shadow: 0 30px 100px rgba(0,0,0,.6),
+                0 0 60px rgba(255,100,0,.08);
+}
+
+@keyframes borderFlow {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+.card-inner {
+    background: rgba(13,7,3,.92);
+    border-radius: 28px;
+    overflow: hidden;
+    backdrop-filter: blur(20px);
+}
+
+textarea {
+    display: block;
+    width: 100%;
+    height: 300px;
+    resize: vertical;
+    border: none;
+    outline: none;
+    padding: 32px;
+    background: transparent;
+    color: #fff;
+    font-family: inherit;
+    font-size: 18px;
+    line-height: 1.7;
+}
+
+textarea::placeholder {
+    color: #8d8179;
+}
+
+.card-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 22px 20px;
+    border-top: 1px solid rgba(255,255,255,.07);
+}
+
+.counter {
+    color: #8d8179;
+    font-size: 14px;
+}
+
+.summarize-btn {
+    border: none;
+    padding: 15px 28px;
+    border-radius: 14px;
+    background: linear-gradient(135deg,#ff7900,#ffc400);
+    color: #090502;
+    font-weight: 800;
+    font-size: 16px;
+    cursor: pointer;
+    transition: .25s ease;
+    box-shadow: 0 10px 35px rgba(255,120,0,.25);
+}
+
+.summarize-btn:hover {
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 15px 45px rgba(255,120,0,.4);
+}
+
+.summarize-btn:disabled {
+    opacity: .55;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* =========================================================
+   SUMMARY SECTION
+========================================================= */
+.summary-section {
+    display: none;
+    margin-top: 55px;
+    animation: summaryAppear .8s ease;
+}
+
+.summary-section.active {
+    display: block;
+}
+
+@keyframes summaryAppear {
+    from {
+        opacity: 0;
+        transform: translateY(35px) scale(.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.summary-title {
+    text-align: center;
+    font-size: 28px;
+    margin-bottom: 20px;
+    color: #ffd18a;
+}
+
+/* =========================================================
+   SUMMARY BOX
+   Dark 3D box + animated purple/blue light border.
+   Animation exists ONLY while .generating-summary is active.
+========================================================= */
+.summary-box {
+    position: relative;
+    isolation: isolate;
+    min-height: 210px;
+    padding: 34px;
+    border-radius: 25px;
+    background:
+        radial-gradient(
+            circle at 50% 35%,
+            rgba(35,25,75,.55),
+            rgba(5,5,12,.97) 72%
+        );
+    border: 1px solid rgba(120,90,255,.25);
+    box-shadow:
+        0 25px 80px rgba(0,0,0,.65),
+        inset 0 0 50px rgba(80,60,180,.08);
+    overflow: hidden;
+}
+
+/* Purple/blue moving light */
+.summary-box.generating-summary::before {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border-radius: 28px;
+    padding: 3px;
+    background:
+        conic-gradient(
+            from 0deg,
+            transparent 0deg,
+            transparent 18deg,
+            #4d20ff 38deg,
+            #8b5cff 55deg,
+            #00c8ff 78deg,
+            transparent 112deg,
+            transparent 190deg,
+            #5725ff 220deg,
+            #d946ef 250deg,
+            #00bfff 285deg,
+            transparent 320deg,
+            transparent 360deg
+        );
+    -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: summaryBorderRotate 2.2s linear infinite;
+    filter:
+        drop-shadow(0 0 7px #704cff)
+        drop-shadow(0 0 18px rgba(0,180,255,.8))
+        drop-shadow(0 0 35px rgba(124,60,255,.45));
+    z-index: 0;
+}
+
+@keyframes summaryBorderRotate {
+    to { transform: rotate(360deg); }
+}
+
+/* Inner glass/dark layer */
+.summary-box.generating-summary::after {
+    content: "";
+    position: absolute;
+    inset: 3px;
+    border-radius: 22px;
+    background:
+        radial-gradient(
+            circle at 50% 50%,
+            rgba(20,15,45,.88),
+            rgba(3,3,9,.98)
+        );
+    box-shadow:
+        inset 0 0 60px rgba(91,33,255,.13),
+        inset 0 0 120px rgba(0,191,255,.05);
+    z-index: 0;
+    pointer-events: none;
+}
+
+/* Moving 3D light sweep */
+.summary-light {
+    position: absolute;
+    width: 55%;
+    height: 180%;
+    left: -70%;
+    top: -40%;
+    transform: rotate(22deg);
+    background:
+        linear-gradient(
+            90deg,
+            transparent,
+            rgba(92,33,255,.05),
+            rgba(126,92,255,.38),
+            rgba(0,191,255,.30),
+            rgba(255,255,255,.10),
+            transparent
+        );
+    filter: blur(18px);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.summary-box.generating-summary .summary-light {
+    opacity: 1;
+    animation: summaryLightSweep 2.1s ease-in-out infinite;
+}
+
+@keyframes summaryLightSweep {
+    0% { left: -70%; }
+    55% { left: 115%; }
+    100% { left: 115%; }
+}
+
+/* =========================================================
+   BORDER PARTICLES
+========================================================= */
+.summary-particle {
+    position: absolute;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #fff;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 3;
+    box-shadow:
+        0 0 5px #fff,
+        0 0 13px #8b5cff,
+        0 0 27px #00bfff;
+}
+
+.summary-box.generating-summary .p1 {
+    animation: particleTop 2.0s linear infinite;
+}
+
+.summary-box.generating-summary .p2 {
+    animation: particleRight 2.35s linear infinite -.65s;
+}
+
+.summary-box.generating-summary .p3 {
+    animation: particleBottom 2.15s linear infinite -1.1s;
+}
+
+.summary-box.generating-summary .p4 {
+    animation: particleLeft 2.3s linear infinite -1.7s;
+}
+
+.summary-box.generating-summary .p5 {
+    width: 3px;
+    height: 3px;
+    animation: particleTop 2.7s linear infinite -1.2s;
+}
+
+.summary-box.generating-summary .p6 {
+    width: 4px;
+    height: 4px;
+    animation: particleRight 2.9s linear infinite -1.9s;
+}
+
+@keyframes particleTop {
+    0%   { left: 5%;  top: 0; opacity: 0; }
+    10%  { opacity: 1; }
+    50%  { left: 50%; top: 0; opacity: 1; }
+    90%  { opacity: 1; }
+    100% { left: 95%; top: 0; opacity: 0; }
+}
+
+@keyframes particleRight {
+    0%   { right: 0; top: 5%; opacity: 0; }
+    10%  { opacity: 1; }
+    50%  { right: 0; top: 50%; opacity: 1; }
+    90%  { opacity: 1; }
+    100% { right: 0; top: 95%; opacity: 0; }
+}
+
+@keyframes particleBottom {
+    0%   { right: 5%; bottom: 0; opacity: 0; }
+    10%  { opacity: 1; }
+    50%  { right: 50%; bottom: 0; opacity: 1; }
+    90%  { opacity: 1; }
+    100% { right: 95%; bottom: 0; opacity: 0; }
+}
+
+@keyframes particleLeft {
+    0%   { left: 0; bottom: 5%; opacity: 0; }
+    10%  { opacity: 1; }
+    50%  { left: 0; bottom: 50%; opacity: 1; }
+    90%  { opacity: 1; }
+    100% { left: 0; bottom: 95%; opacity: 0; }
+}
+
+/* Summary text / generating state */
+.summary-status {
+    position: relative;
+    z-index: 10;
+    min-height: 140px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #c8c3ff;
+    font-size: 18px;
+    text-align: center;
+}
+
+.summary-text {
+    position: relative;
+    z-index: 10;
+    color: #f2efff;
+    font-size: 19px;
+    line-height: 1.8;
+    white-space: pre-wrap;
+}
+
+/* Small animated status core inside summary */
+.status-core {
+    width: 12px;
+    height: 12px;
+    margin-right: 12px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow:
+        0 0 8px #fff,
+        0 0 20px #8b5cff,
+        0 0 35px #00bfff;
+    animation: statusPulse 1s ease-in-out infinite;
+}
+
+@keyframes statusPulse {
+    50% { transform: scale(1.6); opacity: .55; }
+}
+
+.dots::after {
+    content: "";
+    animation: dots 1.5s steps(4,end) infinite;
+}
+
+@keyframes dots {
+    0% { content: ""; }
+    25% { content: "."; }
+    50% { content: ".."; }
+    75% { content: "..."; }
+    100% { content: ""; }
+}
+
+/* =========================================================
+   FOOTER
+========================================================= */
+.footer {
+    text-align: center;
+    margin-top: 70px;
+    color: #75675e;
+    font-size: 14px;
+}
+
+/* =========================================================
+   MOBILE
+========================================================= */
+@media (max-width: 700px) {
+    .container {
+        padding-top: 45px;
+    }
+
+    h1 {
+        font-size: 55px;
+        letter-spacing: -3px;
+    }
+
+    .subtitle {
+        font-size: 17px;
+        margin-bottom: 35px;
+    }
+
+    textarea {
+        height: 260px;
+        padding: 22px;
+    }
+
+    .card-bottom {
+        flex-direction: column;
+        gap: 15px;
+        align-items: stretch;
+    }
+
+    .summarize-btn {
+        width: 100%;
+    }
+
+    .summary-box {
+        padding: 22px;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<div class="background">
+    <div class="smoke one"></div>
+    <div class="smoke two"></div>
+    <div class="smoke three"></div>
+</div>
+
+<main class="container">
+
+    <div class="badge">✨ AI-POWERED SUMMARIZATION</div>
+
+    <h1>AI Summarizer</h1>
+
+    <p class="subtitle">
+        Turn long articles and paragraphs into concise,
+        easy-to-read summaries using AI.
+    </p>
+
+    <!-- INPUT -->
+    <section class="card">
+        <div class="card-inner">
+
+            <textarea
+                id="textInput"
+                placeholder="Paste your article or paragraph here..."
+            ></textarea>
+
+            <div class="card-bottom">
+                <span class="counter" id="counter">0 characters</span>
+
+                <button class="summarize-btn" id="summarizeButton">
+                    Summarize →
+                </button>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- SUMMARY -->
+    <section class="summary-section" id="summarySection">
+
+        <h2 class="summary-title">✨ AI Summary</h2>
+
+        <div class="summary-box" id="summaryBox">
+
+            <!-- These lights are used ONLY during generation -->
+            <span class="summary-particle p1"></span>
+            <span class="summary-particle p2"></span>
+            <span class="summary-particle p3"></span>
+            <span class="summary-particle p4"></span>
+            <span class="summary-particle p5"></span>
+            <span class="summary-particle p6"></span>
+
+            <div class="summary-light"></div>
+
+            <div class="summary-status" id="summaryStatus">
+                <span class="status-core"></span>
+                <span>
+                    AI is generating your summary<span class="dots"></span>
+                </span>
+            </div>
+
+            <div class="summary-text" id="summaryText"></div>
+
+        </div>
+    </section>
+
+    <footer class="footer">
+        AI Summarization System
+    </footer>
+
+</main>
+
+<script>
+/* =========================================================
+   ELEMENTS
+========================================================= */
+const textInput = document.getElementById("textInput");
+const counter = document.getElementById("counter");
+const summarizeButton = document.getElementById("summarizeButton");
+const summarySection = document.getElementById("summarySection");
+const summaryBox = document.getElementById("summaryBox");
+const summaryStatus = document.getElementById("summaryStatus");
+const summaryText = document.getElementById("summaryText");
+
+/*
+=========================================================
+   BEST_3 RENDER API
+
+   When your Render backend is ready, put its URL here.
+
+   Example:
+   const API_URL =
+       "https://your-best3-app.onrender.com/summarize";
+
+   The backend should return:
+   {
+       "summary": "your generated summary"
+   }
+
+   Until you put the URL here, the page uses a demo
+   summary so you can test the animation and UI.
+=========================================================
+*/
+const API_URL = "";
+
+
+/* =========================================================
+   CHARACTER COUNTER
+========================================================= */
+textInput.addEventListener("input", () => {
+    const length = textInput.value.length;
+
+    counter.textContent =
+        length.toLocaleString() + " characters";
+});
+
+
+/* =========================================================
+   START GENERATING ANIMATION
+========================================================= */
+function startGenerating() {
+
+    summarySection.classList.add("active");
+
+    /*
+       THIS is the important part:
+
+       The summary box itself receives
+       "generating-summary".
+
+       Therefore the purple/blue 3D border,
+       moving light and particles appear.
+    */
+    summaryBox.classList.add("generating-summary");
+
+    summaryText.textContent = "";
+
+    summaryStatus.style.display = "flex";
+}
+
+
+/* =========================================================
+   STOP GENERATING ANIMATION
+========================================================= */
+function stopGenerating() {
+
+    /*
+       Remove the class.
+
+       This immediately stops:
+       - rotating purple/blue border
+       - glowing particles
+       - moving 3D light
+    */
+    summaryBox.classList.remove("generating-summary");
+
+    summaryStatus.style.display = "none";
+}
+
+
+/* =========================================================
+   SUMMARIZE
+========================================================= */
+summarizeButton.addEventListener("click", async () => {
+
+    const text = textInput.value.trim();
+
+    if (!text) {
+        textInput.focus();
+        return;
+    }
+
+    summarizeButton.disabled = true;
+
+    /* Clear old result and start animation */
+    summaryText.textContent = "";
+    startGenerating();
+
+    try {
+
+        let result;
+
+        /* =================================================
+           REAL BEST_3 BACKEND
+        ================================================= */
+        if (API_URL.trim() !== "") {
+
+            const response = await fetch(API_URL, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    text: text
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(
+                    "Server returned " + response.status
+                );
+            }
+
+            const data = await response.json();
+
+            result =
+                data.summary ||
+                data.generated_summary ||
+                data.result;
+
+            if (!result) {
+                throw new Error(
+                    "No summary returned by Best_3 API."
+                );
+            }
+
+        }
+
+        /* =================================================
+           DEMO MODE
+        ================================================= */
+        else {
+
+            /*
+               Wait so you can see the actual
+               border animation.
+            */
+            await new Promise(resolve =>
+                setTimeout(resolve, 3500)
+            );
+
+            result = createDemoSummary(text);
+        }
+
+
+        /* =================================================
+           MODEL FINISHED
+        ================================================= */
+
+        /*
+           STOP the border animation BEFORE
+           showing the final summary.
+        */
+        stopGenerating();
+
+        /*
+           Type the final summary.
+        */
+        await typeSummary(result);
+
+    } catch (error) {
+
+        console.error("Summarization error:", error);
+
+        stopGenerating();
+
+        summaryText.textContent =
+            "Something went wrong. Please check your Best_3 server and try again.";
+
+    } finally {
+
+        summarizeButton.disabled = false;
+    }
+});
+
+
+/* =========================================================
+   TYPING EFFECT
+========================================================= */
+async function typeSummary(text) {
+
+    summaryText.textContent = "";
+
+    for (let i = 0; i < text.length; i++) {
+
+        summaryText.textContent += text[i];
+
+        await new Promise(resolve =>
+            setTimeout(resolve, 10)
+        );
+    }
+}
+
+
+/* =========================================================
+   DEMO SUMMARY
+========================================================= */
+function createDemoSummary(text) {
+
+    const sentences =
+        text.match(/[^.!?]+[.!?]+/g);
+
+    if (!sentences || sentences.length <= 3) {
+        return text;
+    }
+
+    return sentences
+        .slice(0, 3)
+        .join(" ")
+        .trim();
+}
+
+
+/* =========================================================
+   CTRL + ENTER / CMD + ENTER
+========================================================= */
+textInput.addEventListener("keydown", (event) => {
+
+    if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key === "Enter"
+    ) {
+
+        event.preventDefault();
+
+        if (!summarizeButton.disabled) {
+            summarizeButton.click();
+        }
+    }
+});
+
+
+/* =========================================================
+   BACKGROUND PARTICLES
+========================================================= */
+for (let i = 0; i < 35; i++) {
+
+    const particle =
+        document.createElement("div");
+
+    particle.className = "particle";
+
+    particle.style.left =
+        Math.random() * 100 + "%";
+
+    particle.style.animationDuration =
+        (8 + Math.random() * 15) + "s";
+
+    particle.style.animationDelay =
+        (-Math.random() * 15) + "s";
+
+    particle.style.opacity =
+        Math.random();
+
+    document
+        .querySelector(".background")
+        .appendChild(particle);
+}
+</script>
+
+</body>
+</html>
