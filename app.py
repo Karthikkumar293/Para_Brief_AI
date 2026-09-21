@@ -3,25 +3,42 @@ from transformers import AutoTokenizer, BartForConditionalGeneration
 import torch
 import os
 
+# ============================================================
+# FLASK APP
+# ============================================================
+
 app = Flask(__name__, static_folder=".")
+
 
 # ============================================================
 # MODEL CONFIGURATION
 # ============================================================
 
-MODEL_PATH = "best_3"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "best_3")
 
 print("=" * 60)
 print("Starting ParaBrief AI")
 print("=" * 60)
 
-# Select device
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# ============================================================
+# DEVICE
+# ============================================================
+
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+else:
+    device = torch.device("cpu")
 
 print("Device:", device)
+
+
+# ============================================================
+# LOAD TOKENIZER
+# ============================================================
+
 print("Loading tokenizer...")
 
-# Load tokenizer
 tokenizer = AutoTokenizer.from_pretrained(
     MODEL_PATH,
     local_files_only=True
@@ -29,9 +46,13 @@ tokenizer = AutoTokenizer.from_pretrained(
 
 print("Tokenizer loaded.")
 
+
+# ============================================================
+# LOAD BART MODEL
+# ============================================================
+
 print("Loading BART summarization model...")
 
-# Load BART model
 model = BartForConditionalGeneration.from_pretrained(
     MODEL_PATH,
     local_files_only=True
@@ -45,108 +66,12 @@ print("=" * 60)
 
 
 # ============================================================
-# FRONTEND
+# HOME PAGE
 # ============================================================
 
-@app.route("/")
+@app.route("/", methods=["GET"])
 def home():
-    return send_from_directory(".", "index.html")
-
-
-# ============================================================
-# SUMMARIZATION API
-# ============================================================
-
-@app.route("/summarize", methods=["POST"])
-def summarize():
-
-    try:
-
-        data = request.get_json()
-
-        if not data:
-            return jsonify({
-                "error": "No JSON data received."
-            }), 400
-
-        text = data.get("text", "").strip()
-
-        if not text:
-            return jsonify({
-                "error": "Please enter some text."
-            }), 400
-
-        # ----------------------------------------------------
-        # TOKENIZATION
-        # ----------------------------------------------------
-
-        inputs = tokenizer(
-            text,
-            return_tensors="pt",
-            truncation=True,
-            max_length=1024
-        )
-
-        # Move tensors to device
-        inputs = {
-            key: value.to(device)
-            for key, value in inputs.items()
-        }
-
-        # ----------------------------------------------------
-        # SUMMARY GENERATION
-        # ----------------------------------------------------
-
-        with torch.no_grad():
-
-            output_ids = model.generate(
-                **inputs,
-
-                # Generation configuration
-                num_beams=4,
-                early_stopping=True,
-
-                # Prevent repetitive phrases
-                no_repeat_ngram_size=3,
-
-                # Summary length
-                min_length=56,
-                max_length=142,
-
-                # Generation tokens
-                decoder_start_token_id=model.config.decoder_start_token_id,
-                eos_token_id=model.config.eos_token_id,
-                pad_token_id=model.config.pad_token_id
-            )
-
-        # ----------------------------------------------------
-        # DETOKENIZATION
-        # ----------------------------------------------------
-
-        summary = tokenizer.decode(
-            output_ids[0],
-            skip_special_tokens=True,
-            clean_up_tokenization_spaces=True
-        )
-
-        summary = summary.strip()
-
-        # ----------------------------------------------------
-        # RESPONSE
-        # ----------------------------------------------------
-
-        return jsonify({
-            "summary": summary
-        })
-
-    except Exception as e:
-
-        print("Summarization error:")
-        print(str(e))
-
-        return jsonify({
-            "error": str(e)
-        }), 500
+    return send_from_directory(BASE_DIR, "index.html")
 
 
 # ============================================================
@@ -159,12 +84,118 @@ def health():
     return jsonify({
         "status": "ok",
         "model": "ParaBrief AI",
-        "architecture": "BART Encoder-Decoder"
+        "architecture": "BART Encoder-Decoder",
+        "device": str(device)
     })
 
 
 # ============================================================
-# RUN APPLICATION
+# SUMMARIZATION API
+# ============================================================
+
+@app.route("/summarize", methods=["POST"])
+def summarize():
+
+    try:
+
+        # Get JSON request
+        data = request.get_json(silent=True)
+
+        if data is None:
+            return jsonify({
+                "error": "Invalid JSON request."
+            }), 400
+
+        # Get text
+        text = data.get("text", "")
+
+        if not isinstance(text, str):
+            return jsonify({
+                "error": "Text must be a string."
+            }), 400
+
+        text = text.strip()
+
+        if not text:
+            return jsonify({
+                "error": "Please enter some text."
+            }), 400
+
+        print("Received text length:", len(text))
+
+        # ====================================================
+        # TOKENIZATION
+        # ====================================================
+
+        inputs = tokenizer(
+            text,
+            return_tensors="pt",
+            truncation=True,
+            max_length=1024
+        )
+
+        # Move tensors to CPU/GPU
+        inputs = {
+            key: value.to(device)
+            for key, value in inputs.items()
+        }
+
+        # ====================================================
+        # GENERATE SUMMARY
+        # ====================================================
+
+        print("Generating summary...")
+
+        with torch.no_grad():
+
+            output_ids = model.generate(
+                **inputs,
+                num_beams=4,
+                early_stopping=True,
+                no_repeat_ngram_size=3,
+                min_length=20,
+                max_length=142,
+                decoder_start_token_id=model.config.decoder_start_token_id,
+                eos_token_id=model.config.eos_token_id,
+                pad_token_id=model.config.pad_token_id
+            )
+
+        # ====================================================
+        # DECODE SUMMARY
+        # ====================================================
+
+        summary = tokenizer.decode(
+            output_ids[0],
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=True
+        )
+
+        summary = summary.strip()
+
+        print("Summary generated successfully.")
+
+        # ====================================================
+        # RETURN RESPONSE
+        # ====================================================
+
+        return jsonify({
+            "summary": summary
+        })
+
+    except Exception as e:
+
+        print("=" * 60)
+        print("SUMMARIZATION ERROR")
+        print(str(e))
+        print("=" * 60)
+
+        return jsonify({
+            "error": str(e)
+        }), 500
+
+
+# ============================================================
+# RUN SERVER
 # ============================================================
 
 if __name__ == "__main__":
@@ -173,10 +204,13 @@ if __name__ == "__main__":
     print("=" * 60)
     print("ParaBrief AI is running")
     print("Open: http://127.0.0.1:5000")
+    print("Health: http://127.0.0.1:5000/health")
     print("=" * 60)
 
     app.run(
-        host="0.0.0.0",
+        host="127.0.0.1",
         port=5000,
-        debug=False
+        debug=False,
+        use_reloader=False,
+        threaded=False
     )
