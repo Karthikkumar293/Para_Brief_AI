@@ -1,6 +1,6 @@
 # Para_Brief_AI
 
-# ParaBrief AI
+
 
 > AI-powered text summarization system designed to transform long paragraphs,
 > articles, reports, and documents into concise and meaningful summaries.
