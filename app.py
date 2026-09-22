@@ -15,6 +15,7 @@ print("=" * 60)
 print("Starting ParaBrief AI")
 print("=" * 60)
 
+# Select CPU or GPU
 device = torch.device(
     "cuda" if torch.cuda.is_available() else "cpu"
 )
@@ -35,7 +36,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 print("Tokenizer loaded.")
 
 # ============================================================
-# LOAD MODEL
+# LOAD BART MODEL
 # ============================================================
 
 print("Loading BART summarization model...")
@@ -48,7 +49,7 @@ model = BartForConditionalGeneration.from_pretrained(
 model.to(device)
 model.eval()
 
-# Fix the generation configuration warning
+# Fix BART generation configuration
 model.generation_config.forced_bos_token_id = 0
 
 print("Model loaded successfully.")
@@ -59,7 +60,7 @@ print("=" * 60)
 # HOME PAGE
 # ============================================================
 
-@app.route("/")
+@app.route("/", methods=["GET"])
 def home():
     return send_from_directory(
         os.path.abspath("."),
@@ -92,7 +93,7 @@ def summarize():
     try:
 
         # ----------------------------------------------------
-        # GET JSON
+        # GET JSON DATA
         # ----------------------------------------------------
 
         data = request.get_json(silent=True)
@@ -120,9 +121,8 @@ def summarize():
         print("=" * 60)
         print("SUMMARIZATION REQUEST")
         print("=" * 60)
-
         print("Input length:", len(text))
-        print("Input:", text[:500])
+        print("Input text:", text[:500])
 
         # ----------------------------------------------------
         # TOKENIZATION
@@ -136,6 +136,7 @@ def summarize():
             padding=True
         )
 
+        # Move tensors to CPU/GPU
         inputs = {
             key: value.to(device)
             for key, value in inputs.items()
@@ -156,20 +157,24 @@ def summarize():
                 input_ids=inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
 
-                # Same settings that worked
+                # Beam search
                 num_beams=6,
 
+                # Summary length
                 min_length=15,
                 max_length=80,
 
+                # Encourage concise output
                 length_penalty=2.0,
 
+                # Reduce repetition
                 no_repeat_ngram_size=3,
-
                 repetition_penalty=1.2,
 
+                # Stop when EOS is generated
                 early_stopping=True,
 
+                # BART generation tokens
                 decoder_start_token_id=(
                     model.config.decoder_start_token_id
                 ),
@@ -186,7 +191,7 @@ def summarize():
             )
 
         # ----------------------------------------------------
-        # DECODE
+        # DECODE SUMMARY
         # ----------------------------------------------------
 
         summary = tokenizer.decode(
@@ -209,13 +214,17 @@ def summarize():
                 "error": "The model did not generate a summary."
             }), 500
 
+        # ----------------------------------------------------
+        # PRINT RESULT
+        # ----------------------------------------------------
+
         print()
         print("GENERATED SUMMARY:")
         print(summary)
         print("=" * 60)
 
         # ----------------------------------------------------
-        # RETURN
+        # RETURN JSON
         # ----------------------------------------------------
 
         return jsonify({
