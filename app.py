@@ -49,7 +49,10 @@ model = BartForConditionalGeneration.from_pretrained(
 model.to(device)
 model.eval()
 
-# Fix BART generation configuration
+# ============================================================
+# GENERATION CONFIGURATION
+# ============================================================
+
 model.generation_config.forced_bos_token_id = 0
 
 print("Model loaded successfully.")
@@ -62,6 +65,7 @@ print("=" * 60)
 
 @app.route("/", methods=["GET"])
 def home():
+
     return send_from_directory(
         os.path.abspath("."),
         "index.html"
@@ -99,6 +103,7 @@ def summarize():
         data = request.get_json(silent=True)
 
         if not data:
+
             return jsonify({
                 "error": "No JSON data received."
             }), 400
@@ -106,6 +111,7 @@ def summarize():
         text = data.get("text", "")
 
         if not isinstance(text, str):
+
             return jsonify({
                 "error": "Text must be a string."
             }), 400
@@ -113,19 +119,25 @@ def summarize():
         text = text.strip()
 
         if not text:
+
             return jsonify({
                 "error": "Please enter some text."
             }), 400
+
+        # ----------------------------------------------------
+        # PRINT REQUEST
+        # ----------------------------------------------------
 
         print()
         print("=" * 60)
         print("SUMMARIZATION REQUEST")
         print("=" * 60)
+
         print("Input length:", len(text))
         print("Input text:", text[:500])
 
         # ----------------------------------------------------
-        # TOKENIZATION
+        # TOKENIZE
         # ----------------------------------------------------
 
         inputs = tokenizer(
@@ -136,16 +148,14 @@ def summarize():
             padding=True
         )
 
-        # Move tensors to CPU/GPU
         inputs = {
             key: value.to(device)
             for key, value in inputs.items()
         }
 
-        print(
-            "Input tokens:",
-            inputs["input_ids"].shape[1]
-        )
+        input_token_count = inputs["input_ids"].shape[1]
+
+        print("Input tokens:", input_token_count)
 
         # ----------------------------------------------------
         # GENERATE SUMMARY
@@ -154,27 +164,31 @@ def summarize():
         with torch.no_grad():
 
             output_ids = model.generate(
+
                 input_ids=inputs["input_ids"],
+
                 attention_mask=inputs["attention_mask"],
 
-                # Beam search
-                num_beams=6,
+                # Stronger beam search
+                num_beams=8,
 
-                # Summary length
-                min_length=15,
-                max_length=80,
+                # Encourage concise summaries
+                length_penalty=3.0,
 
-                # Encourage concise output
-                length_penalty=2.0,
-
-                # Reduce repetition
+                # Prevent repeated phrases
                 no_repeat_ngram_size=3,
-                repetition_penalty=1.2,
+
+                repetition_penalty=1.3,
+
+                # Summary size
+                min_new_tokens=8,
+
+                max_new_tokens=60,
 
                 # Stop when EOS is generated
                 early_stopping=True,
 
-                # BART generation tokens
+                # BART tokens
                 decoder_start_token_id=(
                     model.config.decoder_start_token_id
                 ),
@@ -203,7 +217,7 @@ def summarize():
         summary = summary.strip()
 
         # ----------------------------------------------------
-        # CHECK RESULT
+        # CHECK EMPTY RESULT
         # ----------------------------------------------------
 
         if not summary:
@@ -215,12 +229,89 @@ def summarize():
             }), 500
 
         # ----------------------------------------------------
+        # CHECK WHETHER MODEL COPIED INPUT
+        # ----------------------------------------------------
+
+        normalized_input = " ".join(
+            text.lower().split()
+        )
+
+        normalized_summary = " ".join(
+            summary.lower().split()
+        )
+
+        if normalized_input == normalized_summary:
+
+            print("WARNING: Model copied the input.")
+            print("Trying second generation strategy...")
+
+            with torch.no_grad():
+
+                output_ids = model.generate(
+
+                    input_ids=inputs["input_ids"],
+
+                    attention_mask=inputs["attention_mask"],
+
+                    num_beams=10,
+
+                    length_penalty=4.0,
+
+                    no_repeat_ngram_size=3,
+
+                    repetition_penalty=1.5,
+
+                    min_new_tokens=6,
+
+                    max_new_tokens=45,
+
+                    early_stopping=True,
+
+                    decoder_start_token_id=(
+                        model.config.decoder_start_token_id
+                    ),
+
+                    eos_token_id=(
+                        model.config.eos_token_id
+                    ),
+
+                    pad_token_id=(
+                        model.config.pad_token_id
+                    ),
+
+                    forced_bos_token_id=0
+                )
+
+            summary = tokenizer.decode(
+                output_ids[0],
+                skip_special_tokens=True,
+                clean_up_tokenization_spaces=True
+            )
+
+            summary = summary.strip()
+
+        # ----------------------------------------------------
+        # FINAL CHECK
+        # ----------------------------------------------------
+
+        if not summary:
+
+            return jsonify({
+                "error": "The model generated an empty summary."
+            }), 500
+
+        # ----------------------------------------------------
         # PRINT RESULT
         # ----------------------------------------------------
 
         print()
         print("GENERATED SUMMARY:")
         print(summary)
+
+        print()
+        print("Original characters:", len(text))
+        print("Summary characters:", len(summary))
+
         print("=" * 60)
 
         # ----------------------------------------------------
@@ -228,10 +319,18 @@ def summarize():
         # ----------------------------------------------------
 
         return jsonify({
+
             "summary": summary,
+
             "original_length": len(text),
+
             "summary_length": len(summary)
+
         })
+
+    # --------------------------------------------------------
+    # ERROR HANDLING
+    # --------------------------------------------------------
 
     except Exception as e:
 
@@ -239,7 +338,9 @@ def summarize():
         print("=" * 60)
         print("SUMMARIZATION ERROR")
         print("=" * 60)
+
         print(repr(e))
+
         print("=" * 60)
 
         return jsonify({
